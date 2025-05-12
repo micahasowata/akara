@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"log"
@@ -89,6 +90,11 @@ func buildContent(src string) error {
 		target: target,
 	}
 
+	err = os.MkdirAll(target, 0755)
+	if err != nil {
+		return err
+	}
+
 	err = filepath.WalkDir(filepath.Join(src, "content"), wd.walker)
 	if err != nil {
 		return err
@@ -107,33 +113,51 @@ func (wd walkerDir) walker(path string, entry fs.DirEntry, err error) error {
 		return err
 	}
 
+	if entry.IsDir() {
+		_, err = os.Stat(filepath.Join(path, "_index.html"))
+		if errors.Is(err, os.ErrNotExist) {
+			return errors.New("content and its subdirectories must have _index.html page")
+		}
+	}
+
+	bpath := strings.Split(path, "/")
+
+	if filepath.Ext(entry.Name()) == ".html" && entry.Name() != "_index.html" && bpath[len(bpath)-2] != "content" {
+		return errors.New("only content directory can have multiple standalone pages")
+	}
+
 	relPath, err := filepath.Rel(wd.src, path)
 	if err != nil {
 		return err
 	}
 
-	if !entry.IsDir() {
-		relPath1 := filepath.Clean(strings.TrimPrefix(relPath, "content"))
-		relPath2 := filepath.Clean(strings.Trim(relPath1, filepath.Ext(relPath1)))
-		relPath3 := filepath.Clean(relPath2 + ".html")
-		targetPath := filepath.Join(wd.target, relPath3)
+	relPath = filepath.Clean(strings.TrimPrefix(relPath, "content"))
 
-		parts := strings.Split(relPath1, "/")
-		layoutPath := filepath.Join(wd.src, "layouts", parts[1]+".html")
+	targetPath := filepath.Join(wd.target, relPath)
 
-		info, err := os.Stat(layoutPath)
-		if errors.Is(err, os.ErrNotExist) {
-			return errors.New("no layout file for content section")
-		}
-
-		if info.IsDir() {
-			return errors.New("content layouts must be files")
-		}
-
-		err = os.MkdirAll(filepath.Dir(targetPath), 0755)
+	if entry.IsDir() {
+		err = os.MkdirAll(targetPath, fs.ModePerm)
 		if err != nil {
 			return err
 		}
+	}
+
+	if filepath.Ext(entry.Name()) == ".html" {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		err = os.WriteFile(targetPath, content, fs.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+
+	if filepath.Ext(entry.Name()) == ".md" {
+		layoutPath := filepath.Join(wd.src, "layouts", strings.Split(relPath, "/")[1]+".html")
+
+		tgPath := filepath.Join(wd.target, filepath.Clean(strings.TrimSuffix(relPath, filepath.Ext(relPath))+".html"))
 
 		content, err := convertToHTML(path)
 		if err != nil {
@@ -145,42 +169,32 @@ func (wd walkerDir) walker(path string, entry fs.DirEntry, err error) error {
 			return err
 		}
 
-		err = os.WriteFile(targetPath, content, 0755)
+		err = os.WriteFile(tgPath, content, fs.ModePerm)
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
 func serveFiles(w http.ResponseWriter, r *http.Request, target string) error {
-	cp := filepath.Clean(r.URL.Path)
-	tp := filepath.Join(target, cp+".html")
+	path := filepath.Clean(r.URL.Path)
+	sPath := strings.Split(path, "/")
 
-	info, err := os.Stat(tp)
-	if errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-
-	if info.IsDir() {
-		return errors.New("file should be a file")
-	}
-
-	http.ServeFile(w, r, tp)
+	fmt.Fprintln(w, sPath, len(sPath))
 	return nil
 }
 
 func main() {
-	// err := buildContent("/home/micah/projects/akaratest")
-	// if err != nil {
-	// 	panic(err)
-	// }
+	err := buildContent("/home/micah/projects/akaratest")
+	if err != nil {
+		log.Println(err.Error())
+	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		err := serveFiles(w, r, "/home/micah/projects/akaratest/target")
 		if err != nil {
-			log.Fatal(err)
+			fmt.Fprint(w, err.Error())
 		}
 	})
 
