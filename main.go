@@ -177,11 +177,67 @@ func (wd walkerDir) walker(path string, entry fs.DirEntry, err error) error {
 	return nil
 }
 
+func fileExist(path string) bool {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+
+	if info.IsDir() {
+		return false
+	}
+
+	return true
+}
+
+func dirExist(path string) bool {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+
+	if !info.IsDir() {
+		return false
+	}
+
+	return true
+}
+
 func serveFiles(w http.ResponseWriter, r *http.Request, target string) error {
 	path := filepath.Clean(r.URL.Path)
-	sPath := strings.Split(path, "/")
+	sParts := strings.Split(path, "/")
 
-	fmt.Fprintln(w, sPath, len(sPath))
+	// root path
+	if len(sParts) == 2 {
+		// homepage
+		if sParts[1] == "" {
+			pPath := filepath.Join(target, "_index.html")
+			if fileExist(pPath) {
+				http.ServeFile(w, r, pPath)
+			}
+		}
+
+		if sParts[1] != "" {
+			ok := dirExist(filepath.Join(target, sParts[1]))
+			if ok {
+				http.ServeFile(w, r, filepath.Join(target, sParts[1], "_index.html"))
+			} else {
+				if fileExist(filepath.Join(target, "_"+sParts[1]+".html")) {
+					http.ServeFile(w, r, filepath.Join(target, "_"+sParts[1]+".html"))
+				}
+			}
+		}
+	}
+
+	// other index paths
+	ok := dirExist(filepath.Join(target, path))
+	if ok {
+		http.ServeFile(w, r, filepath.Join(target, path, "_index.html"))
+	} else {
+		if fileExist(filepath.Join(target, path+".html")) {
+			http.ServeFile(w, r, filepath.Join(target, path+".html"))
+		}
+	}
 	return nil
 }
 
