@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/dlclark/regexp2"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
@@ -203,6 +204,53 @@ func dirExist(path string) bool {
 	return true
 }
 
+func getLinksToStylesheets(content []byte) ([]string, error) {
+	start := bytes.Index(content, []byte("<head>")) + len("<head>")
+	end := bytes.Index(content, []byte("</head>"))
+
+	focusArea := content[start:end]
+
+	pattern, err := regexp2.Compile(`<link(?=[^>]*\srel\s*=\s*(['"])stylesheet\1)(?:[^>]*?\s)?href\s*=\s*(['"])((?!https:\/\/).*?)\2[^>]*?\/?>`, 0)
+	if err != nil {
+		return nil, nil
+	}
+
+	var matches []string
+
+	m, err := pattern.FindStringMatch(string(focusArea))
+	if err != nil {
+		return nil, err
+	}
+
+	for m != nil {
+		matches = append(matches, m.String())
+
+		m, err = pattern.FindNextMatch(m)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	result, err := pattern.Replace(string(focusArea), "", -1, -1)
+	if err != nil {
+		return nil, err
+	}
+
+	content = slices.Replace(content, start, end, []byte(result)...)
+
+	fmt.Println(string(content))
+
+	return matches, nil
+}
+
+func findStyleSheetPaths(links []string) ([]string, error) {
+	var paths []string
+
+	for _, v := range links {
+
+	}
+	return paths, nil
+}
 func serveFiles(w http.ResponseWriter, r *http.Request, target string) error {
 	path := filepath.Clean(r.URL.Path)
 	sParts := strings.Split(path, "/")
@@ -242,17 +290,36 @@ func serveFiles(w http.ResponseWriter, r *http.Request, target string) error {
 }
 
 func main() {
-	err := buildContent("/home/micah/projects/akaratest")
+	// err := buildContent("/home/micah/projects/akaratest")
+	// if err != nil {
+	// 	log.Println(err.Error())
+	// }
+
+	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// 	err := serveFiles(w, r, "/home/micah/projects/akaratest/target")
+	// 	if err != nil {
+	// 		fmt.Fprint(w, err.Error())
+	// 	}
+	// })
+
+	// http.ListenAndServe(":8080", nil)
+	//
+	htm, err := convertToHTML("/home/micah/projects/akaratest/content/posts/posts-1.md")
 	if err != nil {
-		log.Println(err.Error())
+		panic(err)
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		err := serveFiles(w, r, "/home/micah/projects/akaratest/target")
-		if err != nil {
-			fmt.Fprint(w, err.Error())
-		}
-	})
+	htm, err = resolveLayout("/home/micah/projects/akaratest/layouts/posts.html", layout{Content: template.HTML(htm)})
+	if err != nil {
+		panic(err)
+	}
 
-	http.ListenAndServe(":8080", nil)
+	links, err := getLinksToStylesheets(htm)
+	if err != nil {
+		panic(err)
+	}
+
+	if links != nil {
+		fmt.Println(links)
+	}
 }
