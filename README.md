@@ -1,6 +1,8 @@
-# akara
+# thrum
 
-name inspiration: popular Nigerian snack
+verb: to make a continuous rhythmic humming sound.
 
-what is it?
-it is a static site generator that aims to be fast and provide excellent user experience
+this is a static site generator focus on simplicity, speed and exceptional user experience
+
+inspiration for the name:
+the incredible speed of hummingbirds wings.

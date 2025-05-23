@@ -81,7 +81,7 @@ func buildContent(src string) error {
 	}
 
 	target := filepath.Join(src, "target")
-	err = os.MkdirAll(target, 0777)
+	err = os.MkdirAll(target, 0o777)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func buildContent(src string) error {
 		target: target,
 	}
 
-	err = os.MkdirAll(target, 0755)
+	err = os.MkdirAll(target, 0o755)
 	if err != nil {
 		return err
 	}
@@ -247,10 +247,10 @@ func findStyleSheetPaths(links []string) ([]string, error) {
 	var paths []string
 
 	for _, v := range links {
-
 	}
 	return paths, nil
 }
+
 func serveFiles(w http.ResponseWriter, r *http.Request, target string) error {
 	path := filepath.Clean(r.URL.Path)
 	sParts := strings.Split(path, "/")
